@@ -129,3 +129,8 @@ port does not implement.
 
 The camera answers `client.notifyDevInit` with `result: true`, and `Init`
 changes from 405 to 406. Only the RPAC path has been run against a real camera.
+
+## License
+
+MIT - see [LICENSE](LICENSE). The owl recording in `sounds/` is public domain;
+see [sounds/README.md](sounds/README.md).
