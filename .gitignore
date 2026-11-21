@@ -4,3 +4,4 @@ __pycache__/
 *.xapk
 *.wav
 *.pcap
+!sounds/*.wav

@@ -7,7 +7,8 @@ reading the DMSS Android app; other models are untested.
 | Script | What it does |
 |---|---|
 | `dahua_smartconfig.py` | Sends Wi-Fi credentials to a camera in pairing mode (blinking green LED) over UDP broadcast + multicast. |
-| `dahua_pairing_sound.py` | Generates the "sound wave" pairing audio by running the app's own encoder in an emulator. |
+| `dahua_pairing_sound_native.py` | Generates the "sound wave" pairing audio in plain Python - no APK needed. Matches the app's encoder; not yet played to a camera. |
+| `dahua_pairing_sound.py` | Generates the same audio by running the app's own encoder in an emulator (needs `libSmartConfig.so` from the APK). |
 | `dahua_discover.py` | Finds cameras on the LAN and reports whether they are initialised. |
 | `dahua_init.py` | Creates the admin password on a camera that is not initialised yet. |
 
@@ -47,6 +48,31 @@ not isolated.
 `libSmartConfig.so` is not included. Get the DMSS APK (`com.mm.android.DMSS`),
 unzip the `armeabi-v7a` split and take `lib/armeabi-v7a/libSmartConfig.so`.
 
+### Without the APK
+
+`dahua_pairing_sound_native.py` is a port of the library's encoder and needs
+nothing but Python:
+
+```sh
+./dahua_pairing_sound_native.py --sn <SERIAL> --out pair.wav --repeat 30
+pw-play pair.wav; rm pair.wav
+```
+
+It was written from the `libSmartConfig.so` shipped in a public Imou SDK
+integration and then compared with the DMSS one (armeabi-v7a, sha256
+`9dcb35bb...93a7`), the build that paired the IPC-C46: apart from the jingle
+in front (the library's cuckoo, here an owl hoot), the two outputs have the
+same length and differ by
+at most 3 LSB per sample (rounding in the library's fixed-point sine). The
+port's own output has not been played to a camera yet.
+
+To repeat the comparison with another build of the library:
+
+```sh
+./dahua_pairing_sound.py --lib libSmartConfig.so --sn <SERIAL> --out ref.wav
+./dahua_pairing_sound_native.py --decode ref.wav    # should print your SSID/SN and "CRC ok"
+```
+
 ## Protocol notes
 
 Payload (`build_payload`):
@@ -70,8 +96,21 @@ the data. For byte `d` at index `i` of `[len] + payload + [sum & 0xff]` the
 destination is `239.X.i.d`, with
 `X = 0x60 | ((6 + (i >> 4) + i + (d >> 4) + d) & 0x0f)`.
 
-**Sound** - the same payload, FSK-modulated around 11 kHz with Reed-Solomon
-coding (`fsk_tx` in the library); not re-implemented here, only emulated.
+**Sound** - the same payload as tones (`fsk_tx` in the library, transmit
+mode 1), 44.1 kHz 16-bit mono. Each byte is two symbols, low nibble first; a
+nibble `v` is a 588-sample (75 baud) tone at `17000 + 100 * v` Hz:
+
+- sync: 18.6 kHz, 2352 samples
+- per byte: low nibble, high nibble; then a 294-sample 18.6 kHz gap (not after the last byte)
+- end: 18.7 kHz, 4704 samples
+
+Every symbol starts at phase 0 and is multiplied by a half-sine window; peak
+level is (7/8)^2 of full scale. The library puts a "cuckoo" jingle in front;
+the port puts a public-domain owl hoot there instead (`sounds/owl_hoot.wav`,
+`--no-hoot` to leave it out). The 11 kHz frequency argument and the Reed-Solomon
+(255,223) coder in the library belong to transmit modes 0 and 2 (18 tones from
+that base frequency instead of 17 kHz), which the app does not use and the
+port does not implement.
 
 **Discovery** - DHIP JSON over UDP 37810 (`DHDiscover.search`). In the reply,
 `Init & 3` is 1 for a camera whose admin account has not been created yet and
