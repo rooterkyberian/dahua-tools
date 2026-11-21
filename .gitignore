@@ -1,0 +1,6 @@
+__pycache__/
+*.so
+*.apk
+*.xapk
+*.wav
+*.pcap
